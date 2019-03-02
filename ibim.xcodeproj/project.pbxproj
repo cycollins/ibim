@@ -25,6 +25,8 @@
 /* Begin PBXFileReference section */
 		F6F7CC752220D69F003D7295 /* ibim */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ibim; sourceTree = BUILT_PRODUCTS_DIR; };
 		F6F7CC782220D69F003D7295 /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
+		F6F7CC7F2220D9AE003D7295 /* LICENSE */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
+		F6F7CC802220DAA0003D7295 /* lhash.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = lhash.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -41,6 +43,7 @@
 		F6F7CC6C2220D69F003D7295 = {
 			isa = PBXGroup;
 			children = (
+				F6F7CC7F2220D9AE003D7295 /* LICENSE */,
 				F6F7CC772220D69F003D7295 /* ibim */,
 				F6F7CC762220D69F003D7295 /* Products */,
 			);
@@ -58,6 +61,7 @@
 			isa = PBXGroup;
 			children = (
 				F6F7CC782220D69F003D7295 /* main.cpp */,
+				F6F7CC802220DAA0003D7295 /* lhash.h */,
 			);
 			path = ibim;
 			sourceTree = "<group>";
