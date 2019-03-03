@@ -42,6 +42,7 @@
 
 #include <vector>
 #include <list>
+#include <cassert>
 
 namespace ibim
 {
@@ -52,47 +53,100 @@ template<typename DatumType, typename ... Keys> class lhash
 private:
   
   int order;
-  size_t magnitude;
-  size_t key_set_size;
+  std::size_t magnitude;
   std::tuple<std::function<double(Keys)> ... > hash_funcs;
-  
   struct datum_record
   {
-    datum_record(DatumType in_datum, const Keys & ... in_keys) : datum(in_datum), keys(in_keys ...) {}
     DatumType datum;
-    
     std::tuple<Keys ...> keys;
+    
+    datum_record(DatumType in_datum, const Keys & ... in_keys) : datum(in_datum), keys(in_keys ...) {}
+    datum_record(DatumType in_datum, const std::tuple<Keys ...>& in_keys) : datum(in_datum), keys(in_keys) {}
   };
+  typedef std::list<datum_record> bucket_type;
+  typedef std::vector<bucket_type> table_type;
+  table_type table;
   
-  template<std::size_t ... Is> void calc_interpolants(double interpolants[], std::index_sequence<Is ... >, const Keys & ... in_keys)
+  template<std::size_t ... Is> void calc_interpolants(double interpolants[sizeof ... (Keys)], std::index_sequence<Is ... >, const Keys & ... in_keys)
   {
     double interp[sizeof ... (Keys)] = { std::get<Is>(hash_funcs)(in_keys) ... };
-    std::memcpy(interpolants, interp, sizeof(interp));
+    std::memcpy(interpolants, interp, sizeof(interp)); // how to avoid this copy?
   }
   
-  size_t find_index(const Keys & ... in_keys)
+  struct index_helper
+  {
+    std::size_t sub_indices[sizeof ... (Keys)];
+    
+    index_helper(std::size_t magnitude, double interpolants[sizeof ... (Keys)])
+    {
+      double *i_ptr = interpolants;
+      std::size_t *s_ptr = sub_indices;
+      std::ptrdiff_t count = sizeof ... (Keys);
+
+      while (--count >= 0)
+      {
+        *s_ptr++ = magnitude * (*i_ptr++);
+      }
+    }
+    
+    //  performs the bit-reversal permutation, combinging the sub_index of the multi-dimensional hash into a single index into the master table. This will
+    //  later allow for efficient, multidimensional range queries.
+
+    std::size_t interleave(int order)
+    {
+      std::size_t index = 0;
+      std::size_t bit_check_mask = 0x1;
+
+      while (--order >= 0)
+      {
+        int key_count = sizeof ... (Keys);
+        std::size_t *s_ptr = sub_indices;
+
+        while (--key_count >= 0)
+        {
+          index <<= 1;
+          std::size_t pattern = *s_ptr++;
+          
+          if ((pattern & bit_check_mask) != 0)
+          {
+            index |= 1;
+          }
+        }
+
+        bit_check_mask <<= 1;
+      }
+      
+      return index;
+    }
+  };
+  
+  std::size_t find_index(const Keys & ... in_keys)
   {
     double interpolants[sizeof ... (Keys)];
     calc_interpolants(interpolants, std::index_sequence_for<Keys ... >{}, in_keys ... );
-    
-    double *i_ptr = interpolants;
-    double *end_ptr = interpolants + sizeof ... (Keys);
-    
-    while (i_ptr != end_ptr)
-    {
-      
-    }
+    index_helper ih(magnitude, interpolants);
+    return (sizeof ... (Keys) > 1) ? ih.interleave(order) : ih.sub_indices[0];
   }
   
-  std::vector<std::list<datum_record>> table;
+  datum_record* find_record(std::list<datum_record>& bucket, const std::tuple<Keys ...> &key_set)
+  {
+    for (auto &d : bucket)
+    {
+      if (d.keys == key_set)
+      {
+        return &d;
+      }
+    }
+
+    return nullptr;
+  }
   
 public:
   
   lhash(int initial_order, std::function<double(const Keys &)> ... in_hash_funcs)
     : order(initial_order)
     , magnitude(1 << order)
-    , key_set_size(sizeof...(Keys))
-    , table(magnitude * key_set_size)
+    , table(1 << (order * sizeof ... (Keys)))
     , hash_funcs(in_hash_funcs ... )
   {
   }
@@ -102,8 +156,30 @@ public:
   void insert(DatumType datum, const Keys & ... in_keys)
   {
     std::size_t index = find_index(in_keys ... );
+    
+    assert(index <= table.size());
+    
+    bucket_type& bucket = table[index];
+    datum_record *found_record = nullptr;
+    
+    if (!bucket.empty())
+    {
+      auto key_set = std::make_tuple(in_keys ... );
+      found_record = find_record(bucket, key_set);
+    }
+    
+    if (found_record)
+    {
+      found_record->datum = datum;  // for this simplified example, we'll just overwrite as necessary. We could except or return an error or ignore or ...
+    }
+    else
+    {
+      found_record = new datum_record(datum, in_keys ... );
+      bucket.push_back(*found_record);
+    }
+    
+    // no burst logic yet, and certainly no contraction logic
   }
-  
 };
   
 }

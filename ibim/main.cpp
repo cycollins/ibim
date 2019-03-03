@@ -65,13 +65,36 @@ double int_with_min_max(int value, int min, int max)
   return double(value - min) / (max - min);
 }
 
+struct double_with_min_max
+{
+  double min;
+  double range;
+  
+  double operator ()(double value)
+  {
+    double bias = value - min;
+    
+    if (value < 0.0)
+      return 0.0;
+    
+    if (bias >= range)
+      return 1.0;
+    
+    return bias / range;
+  }
+  
+  double_with_min_max(double min, double max) : min(min), range(max - min) {}
+};
+
 int main(int argc, const char * argv[]) {
   std::function<double(const std::string&)> ciaas(case_insensitive_ascii_alphabetic_string);
   std::function<double(int)> fwmm(std::bind(int_with_min_max, std::placeholders::_1, 0, 1000));
+  double_with_min_max dwmm(30.0, 50.0);
   
-  ibim::lhash<int, std::string, std::string, int> test_hash(ciaas, ciaas, fwmm);
+  ibim::lhash<int, std::string, std::string, int, double> test_hash(ciaas, ciaas, fwmm, dwmm);
   
-  test_hash.insert(1, "fred", "mary", 700);
+  test_hash.insert(1, "fred", "mary", 700, 40.0);
+  test_hash.insert(3, "edward", "nancy", 500, 31.0);
   
   // insert code here...
   std::cout << "Hello, World!\n";
