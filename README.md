@@ -1,6 +1,6 @@
 # ibim
 
-This is the beginnings of a fairly general-purpose implementation of Kenneth Bowles's Interpolation-based Index
+This is the beginnings of a fairly general-purpose implementation of Walter Burkhard's Interpolation-based Index
 Management hash technique. It builds on his work with linear hashing, which requires a hash function that maps
 (as uniformly as possible) a key-space into the floating point [0.0 1.0), with the requirement that for any keys
 K1 and K2 and hash function h, K1 < K2 => h(K1) < h(K2). This is clearly not as generally applicable as some
