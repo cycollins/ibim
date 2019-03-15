@@ -29,6 +29,7 @@
 
 #include <iostream>
 #include <string>
+#include <cmath>
 #include "lhash.h"
 
 double case_insensitive_ascii_alphabetic_string(const std::string &key)
@@ -54,15 +55,32 @@ double case_insensitive_ascii_alphabetic_string(const std::string &key)
   return accumulator;
 }
 
+// Integer keys are tricky in IBIM. They have the pathalogical feature that they run the risk of generating nice rational values
+// in the required [0 1) real interval. In IBIM, that can make for lots of zero bits at the end of the index when the burst
+// table order gets high, and those zero bits will stay as the order gets higher. The bit-reversal trick that we use to make
+// the more-chaotic-looking lower-order bits dominate the calculation of final index now betrays us because a rational hash
+// result may result in stable lower-order bits for a possibly-large subset of the key-space. This means that the higher
+// the table order gets, the more clumping of records into small set of indices (typically, the table gets more smooth and
+// homogenous as the order gets higher). So one trick is to take an irational number that is close to 1.0 and multiply all
+// results by it so that our results remain in a slightly compressed sub interval of [0 1), which still meets the basic
+// requirements for an IBIM H function, but it ensures that every result will be irational and therefor have more varied
+// bit-pattern in its index calculation. I apply the same logic to the floating point keys, though it seems less likely
+// that floating point data would result in lots of rational values in the interval. On the other hand, I can imagine
+// data records that might use double data to represent say GPA's. That would involve lots of integer values and when
+// divided by the range [0 4] or [0 5], there could be lots of rational results that might cause less-than-ideal
+// behavior.
+
+const double kNotQuiteOne = std::acos(-1.0) / 3.2;
+
 double int_with_min_max(int value, int min, int max)
 {
   if (value < min)
     return 0.0;
   
   if (value >= max)
-    return 1.0;
-  
-  return double(value - min) / (max - min);
+    return kNotQuiteOne;
+
+  return kNotQuiteOne * double(value - min) / (max - min);
 }
 
 struct double_with_min_max
@@ -78,25 +96,27 @@ struct double_with_min_max
       return 0.0;
     
     if (bias >= range)
-      return 1.0;
+      return kNotQuiteOne;
     
-    return bias / range;
+    return (kNotQuiteOne * bias) / range;
   }
   
   double_with_min_max(double min, double max) : min(min), range(max - min) {}
 };
 
-int main(int argc, const char * argv[]) {
+int main(int argc, const char * argv[])
+{
   std::function<double(const std::string&)> ciaas(case_insensitive_ascii_alphabetic_string);
-  std::function<double(int)> fwmm(std::bind(int_with_min_max, std::placeholders::_1, 0, 1000));
+  std::function<double(int)> iwmm(std::bind(int_with_min_max, std::placeholders::_1, 0, 1000));
   double_with_min_max dwmm(30.0, 50.0);
   
-  ibim::lhash<int, std::string, std::string, int, double> test_hash(ciaas, ciaas, fwmm, dwmm);
+  // as a simple stress-test, we create a four-dimensional, int-valued table with a variety
+  // of H functions.
+  
+  ibim::lhash<int, std::string, std::string, int, double> test_hash(ciaas, ciaas, iwmm, dwmm);
   
   test_hash.insert(1, "fred", "mary", 700, 40.0);
-  test_hash.insert(3, "edward", "nancy", 500, 31.0);
+  test_hash.insert(2, "edward", "nancy", 500, 31.0);
   
-  // insert code here...
-  std::cout << "Hello, World!\n";
   return 0;
 }
