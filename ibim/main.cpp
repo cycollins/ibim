@@ -106,17 +106,86 @@ struct double_with_min_max
 
 int main(int argc, const char * argv[])
 {
+  // as a simple stress-test, we create a four-dimensional, int-valued table with a variety
+  // of H functions.
+  
+  struct test_datum
+  {
+    std::string content;
+    
+    test_datum(const std::string &content)
+      : content(content)
+    {
+    }
+    
+    test_datum(test_datum &&other)
+      : content(std::move(other.content))
+    {
+      std::cout << "Move constructor of " << content << "_datum." << std::endl;
+    }
+    
+    test_datum(const test_datum &other)
+      : content(other.content)
+    {
+      std::cout << "Copy constructor of " << content << "_datum." << std::endl;
+    }
+    
+    test_datum &operator=(test_datum &&) = default;
+    test_datum &operator=(test_datum &) = default;
+  };
+  
+  struct key_class
+  {
+    std::string id;
+    
+    key_class(const std::string &id)
+      : id(id)
+    {
+    }
+    
+    key_class(key_class &&other)
+      : id(std::move(other.id))
+    {
+      std::cout << "Move constructor of " << id << "_key." << std::endl;
+    }
+    
+    key_class(const key_class &other)
+      : id(other.id)
+    {
+      std::cout << "Copy constructor of " << id << "_key." << std::endl;
+    }
+    
+    key_class &operator=(key_class &&) = default;
+    key_class &operator=(key_class &) = default;
+    
+    bool operator==(const key_class& other) const
+    {
+      return (id == other.id);
+    }
+  };
+  
+  struct key_class_hash
+  {
+    double operator()(const key_class &key)
+    {
+      return case_insensitive_ascii_alphabetic_string(key.id);
+    }
+  } kk;
+  
   std::function<double(const std::string&)> ciaas(case_insensitive_ascii_alphabetic_string);
   std::function<double(int)> iwmm(std::bind(int_with_min_max, std::placeholders::_1, 0, 1000));
   double_with_min_max dwmm(30.0, 50.0);
   
-  // as a simple stress-test, we create a four-dimensional, int-valued table with a variety
-  // of H functions.
+  ibim::lhash<test_datum, key_class, std::string, int, double> test_hash(kk, ciaas, iwmm, dwmm);
   
-  ibim::lhash<int, std::string, std::string, int, double> test_hash(ciaas, ciaas, iwmm, dwmm);
+  key_class mary_key("mary");
+  key_class edward_key("edward");
   
-  test_hash.insert(1, "fred", "mary", 700, 40.0);
-  test_hash.insert(2, "edward", "nancy", 500, 31.0);
+  test_datum angus_datum("angus");
+  test_datum bridget_datum("bridget");
+  
+  test_hash.insert(angus_datum, std::move(mary_key), "fred", 700, 40.0);
+  test_hash.insert(std::move(bridget_datum), edward_key, "nancy", 500, 31.0);
   
   return 0;
 }

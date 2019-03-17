@@ -77,14 +77,14 @@ private:
     {
     }
 
-    datum_record(const DatumType &in_datum, std::size_t in_full_index, std::tuple<Keys ...> &&in_keys)
+    datum_record(const DatumType &in_datum, std::size_t in_full_index, std::tuple<Keys ... > &&in_keys)
       : datum(in_datum)
       , full_index(in_full_index)
       , keys(std::move(in_keys))
     {
     }
     
-    datum_record(DatumType &&in_datum, std::size_t in_full_index, std::tuple<Keys ...> &&in_keys)
+    datum_record(DatumType &&in_datum, std::size_t in_full_index, std::tuple<Keys ... > &&in_keys)
       : datum(std::move(in_datum))
       , full_index(in_full_index)
       , keys(std::move(in_keys))
@@ -95,11 +95,6 @@ private:
   typedef std::list<datum_record> bucket_type;
   typedef std::vector<bucket_type> table_type;
   table_type table;
-  
-//  template<std::size_t ... Is> void calc_interpolants(double interpolants[sizeof ... (Keys)], std::index_sequence<Is ... >, const std::tuple<Keys ...>& key_set)
-//  {
-//    interpolants = (double [sizeof ... (Keys)]){ std::get<Is>(hash_funcs)(std::get<Is>(key_set)) ... }; // surprised (but pleased) this works.
-//  }
   
   struct index_helper
   {
@@ -181,16 +176,12 @@ private:
   {
     int effective_order = full ? maximum_order : order;
     double multiplicand = double(1 << effective_order);
-//    double interpolants[sizeof ... (Keys)];
-//    calc_interpolants(interpolants, std::index_sequence_for<Keys ... >{}, key_set);
-//    std::array<double, sizeof ... (Keys)> interpolants = calc_interpolants2(std::index_sequence_for<Keys ... >{}, key_set);
-
     double interpolants[sizeof ... (Keys)]{ std::get<Is>(hash_funcs)(std::get<Is>(key_set)) ... };
     index_helper ih(multiplicand, interpolants);
     return ih.bit_reversal(effective_order);
   }
   
-  datum_record *find_record(bucket_type &bucket, const std::tuple<Keys ...> &key_set)
+  datum_record *find_record(bucket_type &bucket, const std::tuple<Keys ... > &key_set)
   {
     for (datum_record &d : bucket)
     {
@@ -264,19 +255,56 @@ private:
     return false;
   }
   
-  // question: what if copy semantics is slow for the keys? The keys get copied into the tupple and then copied into the datum_record.
-  // I'm sure there's a way to accomplish move semantics for the keys if called for. The goal would be to use std::forward so that any
-  // individual key could be move or copy. For now, it's OK that that the tuple stores the acutal storage type (kind of unsafe to hash
-  // references or pointers anyway.
+  void insert_common(DatumType &&datum, std::tuple<Keys ...> &&key_set)
+  {
+    // the "full_index" here means the final index this set of keys will generate when the table is burst to its
+    // highest level. In theory we could just calculate the index for the current burst level, but the one is
+    // easily calculated by shifting the full index appropriately to the right. If we insert a new datum_record
+    // into a bucket, we store with it the full index, so that it can be repositioned in the table when a burst
+    // takes place without calling the hash functions again. This lessens the performance impact of the hash
+    // functions in the eent that they are expensive. They generally are not, though they virtually always involve
+    // a floating point multiply and divide, which is still more expensive than the shift, not to mention iterating
+    // through the tuple of functions and keys and doing the interleave and reversal. The "full" parameter on
+    // create_index will be false when we calculate a test index when retrieving data to save a little time, but here
+    // in the insert routine, we want both the test index and the full index in case we create a new data record.
+    
+    std::size_t full_index = create_index(true, std::index_sequence_for<Keys ... >{}, key_set);
+    std::size_t index = full_index >> current_shift;
+    
+    assert(index <= table.size());
+    
+    bucket_type &bucket = table[index];
+    datum_record *found_record = nullptr;
+    
+    if (!bucket.empty())
+    {
+      found_record = find_record(bucket, key_set);
+    }
+    
+    if (found_record)
+    {
+      found_record->datum = std::move(datum);
+    }
+    else
+    {
+      if (size_maintenance(bucket))
+      {
+        insert_common(std::move(datum), std::move(key_set));
+        return;
+      }
+      
+      datum_record new_record(std::move(datum), full_index, std::move(key_set));
+      bucket.push_back(std::move(new_record));
+    }
+  }
   
 public:
   
-//  static const int kMinimumSpread = 3;
   static constexpr int kMinimumOrder = 3;
   static constexpr int kDefaultInitialOrder = 5;
   static constexpr std::size_t kDefaultBurstThreshold = 16;
   static constexpr int kDefaultMaximumOrder = 24; // seems like enough, right?
-  static constexpr int kMaximumIndexSpaceOrder = 63; // this is the maximum power of two for any index space (don't worry - it will only be virtual when it gets this large)
+  static constexpr int kMaximumIndexSpaceOrder = 63; // this is the maximum power of two for any index space
   static constexpr int kActualMaxOrder = static_cast<int>(kMaximumIndexSpaceOrder / sizeof ... (Keys));
   static constexpr int kActualMinOrder = std::min(kMinimumOrder, kActualMaxOrder);
   
@@ -295,56 +323,63 @@ public:
     : lhash(kDefaultMaximumOrder
       , kDefaultInitialOrder
       , kDefaultBurstThreshold
-      , in_hash_funcs ...)
+      , in_hash_funcs ... )
   {
   }
   
-  void insert(const DatumType &datum, const Keys & ... in_keys)
+  //  so the following is a bit of an experiment here's the idea: the original insert looked something like:
+  //
+  //  void insert(const DatumType &datum, const Keys & ... in_keys)
+  //  {
+  //    std::tuple<Keys ... > key_set(in_keys ... );
+  //    insert_common(datum, std::move(key_set));
+  //  }
+  //
+  //  in case we want to use move semantics for the datum...
+  //
+  //  void insert(DatumType &&datum, const Keys & ... in_keys)
+  //  {
+  //    std::tuple<Keys ... > key_set(in_keys ... );
+  //    insert_common(std::move(datum), std::move(key_set));
+  //  }
+  //
+  //  So that's all well and good, but the above signature ensures that the tuple that holds key set will
+  //  be initialized using copy semantics. What if a copy operation for a key object is expensive and a
+  //  move is less so Not likely because keys are typically pretty primitive types, but as an exercise, I
+  //  wanted to know if I could make one or more of the keys use a std::move to specify that the key data
+  //  should be stored in the hash entry using move semantics. So the rewrite below uses an arbitrary set
+  //  of types for input, U and T... The compiler will deduce the types for each parameter, that way each
+  //  one can be individually exposed to std::forward in case it was specified with std::move. Types are
+  //  still locked down, because the template instantiation logic will still require a match in count
+  //  for each of the input types, and only the specified types in the tuple can be constructed (move or
+  //  copy). Another upside to this signature is that each key will be individually constructed with whatever
+  //  inputs are supported by their respective constructors. So even if I didn't care about move vs copy
+  //  under user control, this is by far a more flexible calling convention. Follow-up: The logic works,
+  //  but one of the problems I note (and it seems endemic to modern C++ coding practices) is an enormous
+  //  number of what seem like unnecessary moves/copies. There's generally a big difference between the
+  //  two, but it's difficult to know which is preferable and for which template types. Copy semantics
+  //  for std::string is optimized with reference-counted separate backing stores, which incidentally
+  //  means that it's move operation is usually pretty much the same as its copy. On the other hand, I
+  //  initially thought that std::tuple might be the same, with separate backing store for the aggregate
+  //  object storage (making a move really quick). It isn't. A move involves a sub-move for each constituent
+  //  and a copy involves a sub-copy for each. A std::array move is quick (an exchange of backing store)
+  //  and a copy is potentially very slow, with a copy for each object in the array. These things are
+  //  discoverable, but there is no contract for any of this, which means if they are used in an
+  //  implementation, the behavior could change substantially. One of the great beauties of C and older
+  //  C++ was that the relationship between source code and object code was very easy to predict. Starting
+  //  with C++11 and the normalization of the use of the old STL and meta-programming, we are programming
+  //  for the compiler, not the target hardware. A vast portion of the implementation is hidden, even
+  //  for operations that normally would be easily inspectable. I'm not a fan. On the other hand, the
+  //  power of these later enhancements is undeniable, and this implementation of IBIM is an example.
+  //  In terms of functionality per line of code, the later innovaitons in the language are very
+  //  impressive. But extensive profiling is requied to understand the implications of any given
+  //  implementation choice, and it is necessary after every build because changes in implementation
+  //  could vary whildly between run-time versions. I remain ambivalent.
+  
+  template<typename U, typename ... T> void insert(U datum, T ... in_keys)
   {
-//    static_assert(std::is_integral<T>::value || std::is_same<const DatumType &, T>::value || std::is_same<DatumType &&, T>::value,
-//                  "Argument 'datum' can only be integral or of type 'const DatumType &' or 'DatumType &&'");
-    
-    // the "full_index" here means the final index this set of keys will generate when the table is burst to its
-    // highest level. In theory we could just calculate the index for the current burst level, but the one is
-    // easily calculated by shifting the full index appropriately to the right. If we insert a new datum_record
-    // into a bucket, we store with it the full index, so that it can be repositioned in the table when a burst
-    // takes place without calling the hash functions again. This lessens the performance impact of the hash
-    // functions in the eent that they are expensive. They generally are not, though they virtually always involve
-    // a floating point multiply and divide, which is still more expensive than the shift, not to mention iterating
-    // through the tuple of functions and keys and doing the interleave and reversal. The "full" parameter on
-    // create_index will be false when we calculate a test index when retrieving data to save a little time, but here
-    // in the insert routine, we want both the test index and the full index in case we create a new data record.
-    
-    std::tuple<Keys ...> key_set(in_keys ...);
-    
-    std::size_t full_index = create_index(true, std::index_sequence_for<Keys ... >{}, key_set);
-    std::size_t index = full_index >> current_shift;
-    
-    assert(index <= table.size());
-    
-    bucket_type &bucket = table[index];
-    datum_record *found_record = nullptr;
-    
-    if (!bucket.empty())
-    {
-      found_record = find_record(bucket, key_set);
-    }
-    
-    if (found_record)
-    {
-      found_record->datum = datum;
-    }
-    else
-    {
-      if (size_maintenance(bucket))
-      {
-        insert(datum, in_keys ...);
-        return;
-      }
-      
-      datum_record new_record(datum, full_index, std::move(key_set));
-      bucket.push_back(std::move(new_record));
-    }
+    std::tuple<Keys ... > key_set(std::forward<Keys>(in_keys) ... );
+    insert_common(std::forward<DatumType>(datum), std::move(key_set));
   }
 };
   
