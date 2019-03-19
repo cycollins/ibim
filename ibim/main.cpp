@@ -70,17 +70,15 @@ double case_insensitive_ascii_alphabetic_string(const std::string &key)
 // divided by the range [0 4] or [0 5], there could be lots of rational results that might cause less-than-ideal
 // behavior.
 
-const double kNotQuiteOne = std::acos(-1.0) / 3.2;
-
 double int_with_min_max(int value, int min, int max)
 {
   if (value < min)
     return 0.0;
   
   if (value >= max)
-    return kNotQuiteOne;
+    return ibim::not_quite_one;
 
-  return kNotQuiteOne * double(value - min) / (max - min);
+  return ibim::not_quite_one * double(value - min) / (max - min);
 }
 
 struct double_with_min_max
@@ -96,9 +94,9 @@ struct double_with_min_max
       return 0.0;
     
     if (bias >= range)
-      return kNotQuiteOne;
+      return ibim::not_quite_one;
     
-    return (kNotQuiteOne * bias) / range;
+    return (ibim::not_quite_one * bias) / range;
   }
   
   double_with_min_max(double min, double max) : min(min), range(max - min) {}

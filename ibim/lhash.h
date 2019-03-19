@@ -42,12 +42,17 @@
 #include <utility>
 #include <cassert>
 #include <algorithm>
+#include <iterator>
 
 namespace ibim
 {
+const double not_quite_one = std::acos(-1.0) / 3.2;
+  
 template<typename DatumType, typename ... Keys> class lhash
 {
 private:
+  
+  typedef lhash<DatumType, Keys ... > this_type;
   
   int maximum_order;
   int order;
@@ -58,6 +63,7 @@ private:
   
   struct datum_record
   {
+    static constexpr bool multidimensional = sizeof ... (Keys) > 1;
     DatumType datum;
     std::size_t full_index;
     std::tuple<Keys ...> keys;
@@ -93,7 +99,8 @@ private:
  };
   
   typedef std::list<datum_record> bucket_type;
-  typedef std::vector<bucket_type> table_type;
+  template<typename T> using indexed_table_type = std::vector<T>;
+  typedef indexed_table_type<bucket_type> table_type;
   table_type table;
   
   struct index_helper
@@ -304,8 +311,8 @@ public:
   static constexpr int kDefaultInitialOrder = 5;
   static constexpr std::size_t kDefaultBurstThreshold = 16;
   static constexpr int kDefaultMaximumOrder = 24; // seems like enough, right?
-  static constexpr int kMaximumIndexSpaceOrder = 63; // this is the maximum power of two for any index space
-  static constexpr int kActualMaxOrder = static_cast<int>(kMaximumIndexSpaceOrder / sizeof ... (Keys));
+  static constexpr int kMaximumIndexSpaceOrder = 32; // this is the maximum power of two for any index space
+  static constexpr int kActualMaxOrder = int((double(kMaximumIndexSpaceOrder) / sizeof ... (Keys)) + 0.5);
   static constexpr int kActualMinOrder = std::min(kMinimumOrder, kActualMaxOrder);
   
   lhash(int in_maximum_order, int initial_order, std::size_t in_burst_threshold, std::function<double(const Keys &)> ... in_hash_funcs)
@@ -381,6 +388,83 @@ public:
     std::tuple<Keys ... > key_set(std::forward<Keys>(in_keys) ... );
     insert_common(std::forward<DatumType>(datum), std::move(key_set));
   }
+  
+//  typedef std::iterator<std::forward_iterator_tag, DatumType> iterator_type;
+  class iterator : public std::iterator<std::forward_iterator_tag, DatumType, std::ptrdiff_t, DatumType *, DatumType &>
+  {
+    friend this_type;
+    
+  private:
+    const this_type *table_object;
+    
+    typedef std::vector<size_t> index_collection_type;
+    index_collection_type bucket_set;
+    typename index_collection_type::const_iterator current_bucket;
+    typename bucket_type::const_iterator current_record;
+    std::tuple<Keys ...> key_set;
+    
+  public:
+    iterator(const this_type *in_table, index_collection_type &&in_bucket_set, std::tuple<Keys ...> &&in_key_set)
+      : table_object(in_table)
+      , bucket_set(std::move(in_bucket_set))
+      , current_bucket(bucket_set.begin())
+      , current_record(table_object->table[*current_bucket].begin())
+      , key_set(std::move(in_key_set))
+    {
+    }
+    
+    iterator& operator++()
+    {
+      auto end = current_record.end();
+      current_record++;
+      
+      if (current_bucket == bucket_set.begin() || current_bucket == (bucket_set.end() - 1))
+      {
+        for (; current_record->key_set != key_set && current_record != end; current_record++)
+        {
+        }
+      }
+
+      if (current_record == end)
+      {
+        current_bucket++;
+        
+        if (current_bucket != bucket_set.end())
+        {
+          current_record = table_object->table[*current_bucket].begin();
+        }
+      }
+      
+      return *this;
+    }
+    
+    iterator operator++(int)
+    {
+      iterator retval = *this;
+      ++(*this);
+      return retval;
+    }
+    
+    bool operator==(iterator other) const
+    {
+#pragma error "not implemented"
+    }
+    
+    bool operator!=(iterator other) const
+    {
+      return !(*this == other);
+    }
+    
+    _Reference operator*() const
+    {
+#pragma error "not implemented"
+    }
+  };
+  
+//  range_iterator begin()
+//  {
+//    return range_iterator(this);
+//  }
 };
   
 }
