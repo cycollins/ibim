@@ -52,7 +52,7 @@ template<typename DatumType, typename ... Keys> class lhash
 {
 private:
   
-  typedef lhash<DatumType, Keys ... > this_type;
+  typedef lhash<DatumType, Keys ... > linear_hash_type;
   
   int maximum_order;
   int order;
@@ -389,82 +389,106 @@ public:
     insert_common(std::forward<DatumType>(datum), std::move(key_set));
   }
   
-//  typedef std::iterator<std::forward_iterator_tag, DatumType> iterator_type;
   class iterator : public std::iterator<std::forward_iterator_tag, DatumType, std::ptrdiff_t, DatumType *, DatumType &>
   {
-    friend this_type;
-    
+    friend linear_hash_type;
+
   private:
-    const this_type *table_object;
-    
+    const linear_hash_type *table_object;
+
     typedef std::vector<size_t> index_collection_type;
     index_collection_type bucket_set;
     typename index_collection_type::const_iterator current_bucket;
     typename bucket_type::const_iterator current_record;
-    std::tuple<Keys ...> key_set;
-    
+
   public:
-    iterator(const this_type *in_table, index_collection_type &&in_bucket_set, std::tuple<Keys ...> &&in_key_set)
+    iterator(const linear_hash_type *in_table, index_collection_type &&in_bucket_set)
       : table_object(in_table)
       , bucket_set(std::move(in_bucket_set))
       , current_bucket(bucket_set.begin())
       , current_record(table_object->table[*current_bucket].begin())
-      , key_set(std::move(in_key_set))
     {
     }
-    
+
+    iterator(const iterator &) = default;
+    iterator(iterator &&) = default;
+
     iterator& operator++()
     {
-      auto end = current_record.end();
+      auto end = table_object->table[*current_bucket].end();
       current_record++;
-      
-      if (current_bucket == bucket_set.begin() || current_bucket == (bucket_set.end() - 1))
+
+      if (current_bucket == (bucket_set.end() - 1))
       {
-        for (; current_record->key_set != key_set && current_record != end; current_record++)
-        {
-        }
       }
 
       if (current_record == end)
       {
         current_bucket++;
-        
+
         if (current_bucket != bucket_set.end())
         {
           current_record = table_object->table[*current_bucket].begin();
         }
       }
-      
+
       return *this;
     }
-    
+
     iterator operator++(int)
     {
       iterator retval = *this;
       ++(*this);
       return retval;
     }
-    
+
     bool operator==(iterator other) const
     {
-#pragma error "not implemented"
     }
-    
+
     bool operator!=(iterator other) const
     {
       return !(*this == other);
     }
     
-    _Reference operator*() const
+    typename iterator::reference operator*() const
     {
-#pragma error "not implemented"
+      return DatumType();
     }
+
   };
   
-//  range_iterator begin()
-//  {
-//    return range_iterator(this);
-//  }
+  // the interval type here is meant as an input to a multi-dimensional range query (one of the main reasons for this data structure). It
+  // looks like there might be a std library interval object coming in some version of C++ post-20, but it's not here now. There is an
+  // interval in each dimension, and each can be open or closed on either end... at least that's the plan right now. The claim of IBIM is
+  // that it can resolve the set of buckets containing the records requested in close to O(1) time, or O(n) in the number of dimensions of
+  // the key space, which is fixed for any given instance of an IBIM hash table. I haven't decided how to package the results and iterating
+  // over the results will obviously be O(n) in the size of the record set returned, but the identification of the buckets containing
+  // the data is unrelated to the number of records in the table.
+  //
+  // To express an interval, we'll use 4-tuple with an lower and upper bound followed by two bools indicating whether either end of the
+  // the interval is closed.
+  
+  template<typename T> using interval = std::tuple<const T &, const T &, bool, bool>;
+  using bounds_pair_type = std::pair<size_t, size_t>;
+  using interval_set_type = std::tuple<interval<Keys> ... >;
+
+  template<std::size_t ... Is> bounds_pair_type create_bounds(std::index_sequence<Is ... >, const interval_set_type &interval_set)
+  {
+    double multiplicand = double(1 << order);
+    double lower_interpolants[sizeof ... (Keys)]{ std::get<Is>(hash_funcs)(std::get<0>(std::get<Is>(interval_set))) ... };
+    index_helper l_ih(multiplicand, lower_interpolants);
+    double upper_interpolants[sizeof ... (Keys)]{ std::get<Is>(hash_funcs)(std::get<1>(std::get<Is>(interval_set))) ... };
+    index_helper u_ih(multiplicand, upper_interpolants);
+    return bounds_pair_type(l_ih.bit_reversal(order), u_ih.bit_reversal(order));
+  }
+  
+  iterator range_query(const interval<Keys> & ... intervals)
+  {
+    // create a tuple from the intervals, to avoid marshalling the parameters to helper functions all over again
+    interval_set_type interval_set(intervals ... );
+    bounds_pair_type bounds_pair(create_bounds(std::index_sequence_for<Keys ... >{}, interval_set));
+  }
 };
   
 }
