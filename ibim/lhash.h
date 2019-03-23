@@ -46,10 +46,21 @@
 
 namespace ibim
 {
-const double not_quite_one = std::acos(-1.0) / 3.2;
+static const double not_quite_one = std::acos(-1.0) / 3.2;
   
 template<typename DatumType, typename ... Keys> class lhash
 {
+public:
+  static constexpr int kMinimumOrder = 3;
+  static constexpr int kDefaultInitialOrder = 5;
+  static constexpr std::size_t kDefaultBurstThreshold = 16;
+  static constexpr int kDefaultMaximumOrder = 24; // seems like enough, right?
+  static constexpr int kMaximumIndexSpaceOrder = 32; // this is the maximum power of two for any index space
+  static constexpr std::size_t key_count = sizeof ... (Keys);
+  static constexpr int kActualMaxOrder = int((double(kMaximumIndexSpaceOrder) / key_count) + 0.5);
+  static constexpr int kActualMinOrder = std::min(kMinimumOrder, kActualMaxOrder);
+  static constexpr bool multidimensional = key_count > 1;
+
 private:
   
   typedef lhash<DatumType, Keys ... > linear_hash_type;
@@ -63,7 +74,6 @@ private:
   
   struct datum_record
   {
-    static constexpr bool multidimensional = sizeof ... (Keys) > 1;
     DatumType datum;
     std::size_t full_index;
     std::tuple<Keys ...> keys;
@@ -105,15 +115,15 @@ private:
   
   struct index_helper
   {
-    std::size_t sub_indices[sizeof ... (Keys)];
+    std::size_t sub_indices[key_count];
     
-    index_helper(double magnitude, double interpolants[sizeof ... (Keys)])
+    index_helper(double magnitude, double interpolants[key_count])
     {
-      if constexpr(sizeof ... (Keys) > 1)
+      if constexpr(multidimensional)
       {
         double *i_ptr = interpolants;
         std::size_t *s_ptr = sub_indices;
-        std::ptrdiff_t count = sizeof ... (Keys);
+        std::ptrdiff_t count = key_count;
 
         while (--count >= 0)
         {
@@ -137,14 +147,14 @@ private:
       std::size_t index = 0;
       std::size_t bit_check_mask = 0x1;
 
-      if constexpr (sizeof ... (Keys) > 1)
+      if constexpr (multidimensional)
       {
         while (--order >= 0)
         {
-          int key_count = sizeof ... (Keys);
+          int kc = key_count;
           std::size_t *s_ptr = sub_indices;
 
-          while (--key_count >= 0)
+          while (--kc >= 0)
           {
             index <<= 1;
             std::size_t pattern = *s_ptr++;
@@ -183,7 +193,7 @@ private:
   {
     int effective_order = full ? maximum_order : order;
     double multiplicand = double(1 << effective_order);
-    double interpolants[sizeof ... (Keys)]{ std::get<Is>(hash_funcs)(std::get<Is>(key_set)) ... };
+    double interpolants[key_count]{ std::get<Is>(hash_funcs)(std::get<Is>(key_set)) ... };
     index_helper ih(multiplicand, interpolants);
     return ih.bit_reversal(effective_order);
   }
@@ -239,9 +249,9 @@ private:
     table_type temp = std::move(table); // should be fast - hopefully just moves the underlying data to temp
     int new_order = order + 1;
     std::size_t new_magnitude = magnitude << 1;
-    int new_shift = current_shift - sizeof ... (Keys);
+    int new_shift = current_shift - key_count;
 
-    std::size_t new_table_size = temp.size() << sizeof ... (Keys);
+    std::size_t new_table_size = temp.size() << key_count;
     table.resize(new_table_size);
     
     rehash(temp, new_shift);
@@ -307,21 +317,13 @@ private:
   
 public:
   
-  static constexpr int kMinimumOrder = 3;
-  static constexpr int kDefaultInitialOrder = 5;
-  static constexpr std::size_t kDefaultBurstThreshold = 16;
-  static constexpr int kDefaultMaximumOrder = 24; // seems like enough, right?
-  static constexpr int kMaximumIndexSpaceOrder = 32; // this is the maximum power of two for any index space
-  static constexpr int kActualMaxOrder = int((double(kMaximumIndexSpaceOrder) / sizeof ... (Keys)) + 0.5);
-  static constexpr int kActualMinOrder = std::min(kMinimumOrder, kActualMaxOrder);
-  
   lhash(int in_maximum_order, int initial_order, std::size_t in_burst_threshold, std::function<double(const Keys &)> ... in_hash_funcs)
     : maximum_order(std::min(in_maximum_order, kActualMaxOrder))
     , order(std::min<int>(initial_order, maximum_order))
     , burst_threshold(in_burst_threshold)
     , magnitude(1 << order)
-    , table(1 << (order * sizeof ... (Keys)))
-    , current_shift((maximum_order - 1) * sizeof ... (Keys))
+    , table(1 << (order * key_count))
+    , current_shift((maximum_order - 1) * key_count)
     , hash_funcs(in_hash_funcs ... )
   {
   }
@@ -469,25 +471,37 @@ public:
   // To express an interval, we'll use 4-tuple with an lower and upper bound followed by two bools indicating whether either end of the
   // the interval is closed.
   
+  
+  
   template<typename T> using interval = std::tuple<const T &, const T &, bool, bool>;
-  using bounds_pair_type = std::pair<size_t, size_t>;
   using interval_set_type = std::tuple<interval<Keys> ... >;
+  using bucket_index_array_type = std::vector<std::size_t>;
+  using bucket_index_set_type = std::pair<bucket_index_array_type, bucket_index_array_type>;
 
-  template<std::size_t ... Is> bounds_pair_type create_bounds(std::index_sequence<Is ... >, const interval_set_type &interval_set)
+  template<std::size_t ... Is> bucket_index_set_type generate_indices(
+    std::index_sequence<Is ... >,
+    const interval_set_type &interval_set,
+    bool whole[key_count])
   {
     double multiplicand = double(1 << order);
-    double lower_interpolants[sizeof ... (Keys)]{ std::get<Is>(hash_funcs)(std::get<0>(std::get<Is>(interval_set))) ... };
+    double lower_interpolants[key_count]{ whole[Is] ? 0.0 : std::get<Is>(hash_funcs)(std::get<0>(std::get<Is>(interval_set))) ... };
     index_helper l_ih(multiplicand, lower_interpolants);
-    double upper_interpolants[sizeof ... (Keys)]{ std::get<Is>(hash_funcs)(std::get<1>(std::get<Is>(interval_set))) ... };
+    double upper_interpolants[key_count]{ whole[Is] ? 1.0 : std::get<Is>(hash_funcs)(std::get<1>(std::get<Is>(interval_set))) ... };
     index_helper u_ih(multiplicand, upper_interpolants);
-    return bounds_pair_type(l_ih.bit_reversal(order), u_ih.bit_reversal(order));
+    
+    using key_interval = std::pair<std::size_t, std::size_t>;
+    std::array<key_interval, key_count> orthogonal_pre_reverse_intervals{ key_interval(l_ih.sub_indices[Is], u_ih.sub_indices[Is]) ... };
+    
+    bucket_index_set_type bucket_indices;
+    return bucket_indices;
   }
   
   iterator range_query(const interval<Keys> & ... intervals)
   {
     // create a tuple from the intervals, to avoid marshalling the parameters to helper functions all over again
     interval_set_type interval_set(intervals ... );
-    bounds_pair_type bounds_pair(create_bounds(std::index_sequence_for<Keys ... >{}, interval_set));
+    bool whole[key_count]{ is_void(intervals) ... };
+    bucket_index_set_type bucket_indices(std::move(generate_indices(std::index_sequence_for<Keys ... >{}, interval_set, whole)));
   }
 };
   
