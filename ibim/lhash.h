@@ -187,6 +187,8 @@ private:
       
       return index;
     }
+    
+    
   };
   
   template<std::size_t ... Is> std::size_t create_index(bool full, std::index_sequence<Is ... >, const std::tuple<Keys ...>& key_set)
@@ -391,75 +393,6 @@ public:
     insert_common(std::forward<DatumType>(datum), std::move(key_set));
   }
   
-  class iterator : public std::iterator<std::forward_iterator_tag, DatumType, std::ptrdiff_t, DatumType *, DatumType &>
-  {
-    friend linear_hash_type;
-
-  private:
-    const linear_hash_type *table_object;
-
-    typedef std::vector<size_t> index_collection_type;
-    index_collection_type bucket_set;
-    typename index_collection_type::const_iterator current_bucket;
-    typename bucket_type::const_iterator current_record;
-
-  public:
-    iterator(const linear_hash_type *in_table, index_collection_type &&in_bucket_set)
-      : table_object(in_table)
-      , bucket_set(std::move(in_bucket_set))
-      , current_bucket(bucket_set.begin())
-      , current_record(table_object->table[*current_bucket].begin())
-    {
-    }
-
-    iterator(const iterator &) = default;
-    iterator(iterator &&) = default;
-
-    iterator& operator++()
-    {
-      auto end = table_object->table[*current_bucket].end();
-      current_record++;
-
-      if (current_bucket == (bucket_set.end() - 1))
-      {
-      }
-
-      if (current_record == end)
-      {
-        current_bucket++;
-
-        if (current_bucket != bucket_set.end())
-        {
-          current_record = table_object->table[*current_bucket].begin();
-        }
-      }
-
-      return *this;
-    }
-
-    iterator operator++(int)
-    {
-      iterator retval = *this;
-      ++(*this);
-      return retval;
-    }
-
-    bool operator==(iterator other) const
-    {
-    }
-
-    bool operator!=(iterator other) const
-    {
-      return !(*this == other);
-    }
-    
-    typename iterator::reference operator*() const
-    {
-      return DatumType();
-    }
-
-  };
-  
   // the interval type here is meant as an input to a multi-dimensional range query (one of the main reasons for this data structure). It
   // looks like there might be a std library interval object coming in some version of C++ post-20, but it's not here now. There is an
   // interval in each dimension, and each can be open or closed on either end... at least that's the plan right now. The claim of IBIM is
@@ -471,37 +404,151 @@ public:
   // To express an interval, we'll use 4-tuple with an lower and upper bound followed by two bools indicating whether either end of the
   // the interval is closed.
   
-  
-  
   template<typename T> using interval = std::tuple<const T &, const T &, bool, bool>;
   using interval_set_type = std::tuple<interval<Keys> ... >;
-  using bucket_index_array_type = std::vector<std::size_t>;
-  using bucket_index_set_type = std::pair<bucket_index_array_type, bucket_index_array_type>;
+  using bucket_index_collection_type = std::vector<std::size_t>;
+  using bucket_indices_type = std::pair<bucket_index_collection_type, bucket_index_collection_type>;
+  using key_index_interval = std::pair<std::size_t, std::size_t>;
 
-  template<std::size_t ... Is> bucket_index_set_type generate_indices(
+  template<std::size_t ... Is> bucket_indices_type generate_indices(
     std::index_sequence<Is ... >,
     const interval_set_type &interval_set,
-    bool whole[key_count])
+    bool all_in[key_count])
   {
     double multiplicand = double(1 << order);
-    double lower_interpolants[key_count]{ whole[Is] ? 0.0 : std::get<Is>(hash_funcs)(std::get<0>(std::get<Is>(interval_set))) ... };
+    double lower_interpolants[key_count]{ all_in[Is] ? 0.0 : std::get<Is>(hash_funcs)(std::get<0>(std::get<Is>(interval_set))) ... };
     index_helper l_ih(multiplicand, lower_interpolants);
-    double upper_interpolants[key_count]{ whole[Is] ? 1.0 : std::get<Is>(hash_funcs)(std::get<1>(std::get<Is>(interval_set))) ... };
+    double upper_interpolants[key_count]{ all_in[Is] ? 1.0 : std::get<Is>(hash_funcs)(std::get<1>(std::get<Is>(interval_set))) ... };
     index_helper u_ih(multiplicand, upper_interpolants);
     
-    using key_interval = std::pair<std::size_t, std::size_t>;
-    std::array<key_interval, key_count> orthogonal_pre_reverse_intervals{ key_interval(l_ih.sub_indices[Is], u_ih.sub_indices[Is]) ... };
+    // I was thinking about using a recursively defined template helper member function to work with the variable number of dimensions
+    // of the range query, but packaging everything up in an array is doable and I believe makes the code more straightforward
+    // (which is almost never the result of adding more template meta-programming). If you're wondering, "pri" stands for pre-reversal
+    // intervals. To be picky, the endpoints of these ranges, because they have not yet been bit-reversed. They are just the
+    // discretized version of the normalized floating point value for the begin and end points of the specified range. These values
+    // are calculated as a side-effect of constructing the private index_helper object.
     
-    bucket_index_set_type bucket_indices;
+    std::array<key_index_interval, key_count> orthogonal_pri{ key_index_interval(l_ih.sub_indices[Is], u_ih.sub_indices[Is]) ... };
+    
+    // It is an implementation detail of an IBIM table that when doing a range query, you first calculate the pre-reversal index value
+    // of the buckets containing the values within a range. The endpoints of this set of indices may contain values that don't
+    // conform to the constraints of the range query. These will have to be weeded out (at this point, I'm thinking it will done
+    // by the forward iterator. A the number of dimensions increases, the boundary becomes the surface of a hyper-rectangular region.
+    // That is, it will be a perimeter of buckets around a solid rectangle for 2d, a surface around a rectangular solid for 3d, and
+    // something I can't quite conceptualize around a hyper-volume. The process for generating the indices is the same for the
+    // surface boundary buckets as it is for the interior "pure" buckets, but I will keep them in two groups, so that the iterator
+    // will know how to handle them. Another approach could have been to use a bit or otherwise annotate the pre-reversed indices
+    // to indicate whether or not it is on the surface, but this seemed more straightforward. The code immediately below pre-calculates
+    // the maximum number of buckets of each kind (some might be empty, depending on how sparcely the table is utilized). Just seemed
+    // to be run-time-friendly. Speaking of which, once the indices are merged and reversed, they will be virtually randomized (ideally).
+    // I think it will make sense to sort the bucket indices after the reversal. Either that or I devise a way of enumerating them
+    // so that they end up sorted. This will help a little (probably very little) cache coherency.
+
+    key_index_interval &interval = orthogonal_pri[0];
+    std::size_t all_indices(std::get<1>(interval) - std::get<0>(interval) + 1);
+    std::size_t whole_indices(all_indices - 2);
+    
+    if constexpr (multidimensional)
+    {
+      for (int i = 1; i < key_count; ++i)
+      {
+        key_index_interval &dimension_interval = orthogonal_pri[i];
+        std::size_t dimension_width(std::get<1>(dimension_interval) - std::get<0>(dimension_interval) + 1);
+        all_indices *= dimension_width;
+        std::size_t interior = dimension_width - 2;
+        whole_indices *= interior;
+      }
+    }
+    
+    bucket_index_collection_type interior_hyper_volume(whole_indices);
+    bucket_index_collection_type boundary_hyper_surface(all_indices - whole_indices);
+    
+    // finally we generate actual indices that we can really use to get actual data, and
+    // if the accounting is correct, it will even be the data we want.
+    
+    bucket_indices_type bucket_indices(interior_hyper_volume, boundary_hyper_surface);
     return bucket_indices;
   }
+  
+  class iterator : public std::iterator<std::forward_iterator_tag, DatumType>
+  {
+    friend linear_hash_type;
+    
+  private:
+    const linear_hash_type *table_object;
+    
+    bucket_indices_type bucket_indices;
+    typename bucket_index_collection_type::iterator current_whole_bucket;
+    typename bucket_index_collection_type::iterator current_partial_bucket;
+    typename bucket_type::const_iterator current_record;
+    
+  public:
+    iterator(const linear_hash_type *in_table, bucket_indices_type &&in_bucket_indices, interval_set_type &&in_interval_set)
+    : table_object(in_table)
+    , bucket_indices(std::move(in_bucket_indices))
+    , current_whole_bucket(std::get<0>(bucket_indices).begin())
+    , current_partial_bucket(std::get<1>(bucket_indices).begin())
+    , current_record(table_object->table[*current_partial_bucket].begin())
+    , interval_set_type(std::move(in_interval_set))
+    {
+    }
+    
+    iterator(const iterator &) = default;
+    iterator(iterator &&) = default;
+    
+    iterator& operator++()
+    {
+//      auto end = table_object->table[*current_bucket].end();
+//      current_record++;
+//
+//      if (current_bucket == (bucket_set.end() - 1))
+//      {
+//      }
+//
+//      if (current_record == end)
+//      {
+//        current_bucket++;
+//
+//        if (current_bucket != bucket_set.end())
+//        {
+//          current_record = table_object->table[*current_bucket].begin();
+//        }
+//      }
+      
+      return *this;
+    }
+    
+    iterator operator++(int)
+    {
+      iterator retval = *this;
+      ++(*this);
+      return retval;
+    }
+    
+    bool operator==(iterator other) const
+    {
+    }
+    
+    bool operator!=(iterator other) const
+    {
+      return !(*this == other);
+    }
+    
+    typename iterator::reference operator*() const
+    {
+      return DatumType();
+    }
+    
+  };
+  
+
   
   iterator range_query(const interval<Keys> & ... intervals)
   {
     // create a tuple from the intervals, to avoid marshalling the parameters to helper functions all over again
     interval_set_type interval_set(intervals ... );
-    bool whole[key_count]{ is_void(intervals) ... };
-    bucket_index_set_type bucket_indices(std::move(generate_indices(std::index_sequence_for<Keys ... >{}, interval_set, whole)));
+    bool all_in[key_count]{ is_void(intervals) ... };
+    bucket_indices_type bucket_indices(std::move(generate_indices(std::index_sequence_for<Keys ... >{}, interval_set, all_in)));
   }
 };
   
