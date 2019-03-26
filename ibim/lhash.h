@@ -517,7 +517,7 @@ public:
         {
           for( ;current_record != bucket.end(); ++current_record)
           {
-            if (current_record_passes_filter())
+            if (current_record_passes_filter(std::index_sequence_for<Keys ... >{}))
             {
               break;
             }
