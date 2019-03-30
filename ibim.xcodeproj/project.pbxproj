@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F6F5ABC1224F402C00E1BA99 /* ibim_test.mm in Sources */ = {isa = PBXBuildFile; fileRef = F6F5ABC0224F402C00E1BA99 /* ibim_test.mm */; };
 		F6F7CC792220D69F003D7295 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F6F7CC782220D69F003D7295 /* main.cpp */; };
 /* End PBXBuildFile section */
 
@@ -23,6 +24,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		F6F5ABBE224F402C00E1BA99 /* ibim_test.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ibim_test.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F6F5ABC0224F402C00E1BA99 /* ibim_test.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ibim_test.mm; sourceTree = "<group>"; };
 		F6F7CC752220D69F003D7295 /* ibim */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ibim; sourceTree = BUILT_PRODUCTS_DIR; };
 		F6F7CC782220D69F003D7295 /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 		F6F7CC7F2220D9AE003D7295 /* LICENSE */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
@@ -30,6 +33,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		F6F5ABBB224F402C00E1BA99 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F6F7CC722220D69F003D7295 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -40,11 +50,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		F6F5ABBF224F402C00E1BA99 /* ibim_test */ = {
+			isa = PBXGroup;
+			children = (
+				F6F5ABC0224F402C00E1BA99 /* ibim_test.mm */,
+			);
+			path = ibim_test;
+			sourceTree = "<group>";
+		};
 		F6F7CC6C2220D69F003D7295 = {
 			isa = PBXGroup;
 			children = (
 				F6F7CC7F2220D9AE003D7295 /* LICENSE */,
 				F6F7CC772220D69F003D7295 /* ibim */,
+				F6F5ABBF224F402C00E1BA99 /* ibim_test */,
 				F6F7CC762220D69F003D7295 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -53,6 +72,7 @@
 			isa = PBXGroup;
 			children = (
 				F6F7CC752220D69F003D7295 /* ibim */,
+				F6F5ABBE224F402C00E1BA99 /* ibim_test.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -69,6 +89,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		F6F5ABBD224F402C00E1BA99 /* ibim_test */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F6F5ABC3224F402C00E1BA99 /* Build configuration list for PBXNativeTarget "ibim_test" */;
+			buildPhases = (
+				F6F5ABBA224F402C00E1BA99 /* Sources */,
+				F6F5ABBB224F402C00E1BA99 /* Frameworks */,
+				F6F5ABBC224F402C00E1BA99 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ibim_test;
+			productName = ibim_test;
+			productReference = F6F5ABBE224F402C00E1BA99 /* ibim_test.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		F6F7CC742220D69F003D7295 /* ibim */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F6F7CC7C2220D69F003D7295 /* Build configuration list for PBXNativeTarget "ibim" */;
@@ -95,6 +132,9 @@
 				LastUpgradeCheck = 1010;
 				ORGANIZATIONNAME = "David Collins";
 				TargetAttributes = {
+					F6F5ABBD224F402C00E1BA99 = {
+						CreatedOnToolsVersion = 10.2;
+					};
 					F6F7CC742220D69F003D7295 = {
 						CreatedOnToolsVersion = 10.1;
 					};
@@ -114,11 +154,30 @@
 			projectRoot = "";
 			targets = (
 				F6F7CC742220D69F003D7295 /* ibim */,
+				F6F5ABBD224F402C00E1BA99 /* ibim_test */,
 			);
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		F6F5ABBC224F402C00E1BA99 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
+		F6F5ABBA224F402C00E1BA99 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F6F5ABC1224F402C00E1BA99 /* ibim_test.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F6F7CC712220D69F003D7295 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -130,6 +189,44 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		F6F5ABC4224F402C00E1BA99 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = Q5JTH5UZ63;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = ibim_test/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.woodenyou.ibim-test";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		F6F5ABC5224F402C00E1BA99 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = Q5JTH5UZ63;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = ibim_test/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.woodenyou.ibim-test";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
 		F6F7CC7A2220D69F003D7295 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -266,6 +363,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		F6F5ABC3224F402C00E1BA99 /* Build configuration list for PBXNativeTarget "ibim_test" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F6F5ABC4224F402C00E1BA99 /* Debug */,
+				F6F5ABC5224F402C00E1BA99 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		F6F7CC702220D69F003D7295 /* Build configuration list for PBXProject "ibim" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

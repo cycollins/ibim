@@ -444,35 +444,21 @@ public:
     bool at_beginning;
     bool at_end;
     
-    // I obviously could make this into one compound if-statement, but during debugging, it's best to have things proken out
-    // It's kind of a strict requirement that all keys should be both less-than comparable and equals-comperable. Maybe my
-    // my initial idea about an "interval" having modifyable closed_left and closed_right is too simplistic. There should
-    // be template-classes for each possible combination (closed or open on either side and closed or open on both sides).
-    // That way, a user can implement only the comparison operators required.
-    
-    template<typename T> bool passes(const T &key_val, const interval<T> &check_interval)
+    template<typename T> static bool passes(const T &key_val, const interval<T> &check_interval)
     {
       const T &lower_bound(std::get<0>(check_interval));
       const T &upper_bound(std::get<1>(check_interval));
+      
+      if ((key_val < lower_bound) || (key_val > upper_bound))
+      {
+        return false;
+      }
+      
       bool closed_left = std::get<2>(check_interval);
       bool closed_right = std::get<3>(check_interval);
       
-      if (key_val < lower_bound)
-      {
-        return false;
-      }
-      
-      if (!closed_left && (key_val == lower_bound))
-      {
-        return false;
-      }
-      
-      if (key_val > upper_bound)
-      {
-        return false;
-      }
-      
-      if (!closed_right && (key_val == lower_bound))
+      if ((!closed_left && (key_val == lower_bound)) ||
+          (!closed_right && (key_val == upper_bound)))
       {
         return false;
       }
@@ -480,11 +466,71 @@ public:
       return true;
     }
     
-    template<std::size_t ... Is> bool current_record_passes_filter(std::index_sequence<Is ... >)
+    template<std::size_t ... Is> bool current_record_passes_filter(std::index_sequence<Is ... > ) const
     {
       return (passes(std::get<Is>(current_record.keys), std::get<Is>(filter_intervals)) && ... );
     }
     
+    void update_needs_filtering(const std::size_t *sub_index_ptr, const key_index_interval *intervals) const
+    {
+      int i = key_count;
+      while (--i >= 0)
+      {
+        std::size_t dimension_index = *sub_index_ptr++;
+        if ((dimension_index == std::get<0>(*intervals)) ||
+            (dimension_index == std::get<1>(*intervals)))
+        {
+          current_bucket_needs_filtering = true;
+          return;
+        }
+        
+        ++intervals;
+      }
+      
+      current_bucket_needs_filtering = false;
+    }
+    
+    bool current_record_record_has_valid_data()
+    {
+      return (!current_bucket_needs_filtering || current_record_passes_filter(std::index_sequence_for<Keys ... >{}));
+    }
+    
+    void advance_one_record()
+    {
+      bucket_type &bucket(table.table[current_bucket]);
+      
+      ++current_record;
+      if (current_record == bucket.end())
+      {
+        bool still_iterating = false;
+        
+        for (int i = 0; i < key_count; ++i)
+        {
+          std::size_t &dimension_sub_index(reverse_merge_helper.sub_indices[i]);
+          if (dimension_sub_index == std::get<1>(pre_reverse_index_intervals[i]))
+          {
+            dimension_sub_index = std::get<0>(pre_reverse_index_intervals[i]);
+          }
+          else
+          {
+            still_iterating = true;
+            ++dimension_sub_index;
+            break;
+          }
+        }
+        
+        if (!still_iterating)
+        {
+          at_end = true;
+          return;
+        }
+        
+        update_needs_filtering(reverse_merge_helper.sub_indices, pre_reverse_index_intervals.const_data());
+        current_bucket = reverse_merge_helper.bit_reversal(table.order);
+        current_record = table.table[current_bucket].begin();
+      }
+    }
+
   public:
     iterator(const linear_hash_type &in_table
       , const interval_set_type &interval_set
@@ -501,63 +547,40 @@ public:
       , at_beginning(true)
       , at_end(false)
     {
+      if (!current_record_record_has_valid_data())
+      {
+        ++(*this);
+      }
     }
     
+    iterator()
+      : at_end(true)
+    {
+    }
+    
+    static iterator end_iter();
+    
+    iterator end()
+    {
+      return end_iter();
+    }
+
     iterator(const iterator &) = default;
     iterator(iterator &&) = default;
-    
+
     iterator &operator++()
     {
-      if (!at_end)
+      while (!at_end)
       {
-        bucket_type &bucket(table.table[current_bucket]);
-        
-        ++current_record;
-        if (current_bucket_needs_filtering)
+        advance_one_record();
+        if (current_record_record_has_valid_data())
         {
-          for( ;current_record != bucket.end(); ++current_record)
-          {
-            if (current_record_passes_filter(std::index_sequence_for<Keys ... >{}))
-            {
-              break;
-            }
-          }
-        }
-        
-        if (current_record == bucket.end())
-        {
-          bool still_interating = false;
-          
-          for (int i = 0; i < key_count; ++i)
-          {
-            std::size_t &dimension_sub_index(reverse_merge_helper.sub_indices[i]);
-            if (dimension_sub_index == std::get<1>(pre_reverse_index_intervals[i]))
-            {
-              dimension_sub_index = std::get<0>(pre_reverse_index_intervals[i]);
-            }
-            else
-            {
-              still_interating = true;
-              ++dimension_sub_index;
-              break;
-            }
-          }
-          
-          if (still_interating)
-          {
-            current_bucket = reverse_merge_helper.bit_reversal(table.order);
-            current_record = table.table[current_bucket].begin();
-          }
-          else
-          {
-            at_end = true;
-          }
+          break;
         }
       }
-      
       return *this;
     }
-    
+
     iterator operator++(int)
     {
       iterator retval = *this;
@@ -565,8 +588,14 @@ public:
       return retval;
     }
     
-    bool operator==(iterator other) const
+    bool operator==(const iterator &other) const
     {
+      if (&other == &end)
+      {
+        return at_end;
+      }
+      
+      return (table == other.table) && (**this == *other);
     }
     
     bool operator!=(iterator other) const
@@ -576,7 +605,7 @@ public:
     
     typename iterator::reference operator*() const
     {
-      return DatumType();
+      return current_record.datum;
     }
   };
   
