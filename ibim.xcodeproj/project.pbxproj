@@ -95,7 +95,6 @@
 			buildPhases = (
 				F6F5ABBA224F402C00E1BA99 /* Sources */,
 				F6F5ABBB224F402C00E1BA99 /* Frameworks */,
-				F6F5ABBC224F402C00E1BA99 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -159,16 +158,6 @@
 		};
 /* End PBXProject section */
 
-/* Begin PBXResourcesBuildPhase section */
-		F6F5ABBC224F402C00E1BA99 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXResourcesBuildPhase section */
-
 /* Begin PBXSourcesBuildPhase section */
 		F6F5ABBA224F402C00E1BA99 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -197,7 +186,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = Q5JTH5UZ63;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
-				INFOPLIST_FILE = ibim_test/Info.plist;
+				INFOPLIST_FILE = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -216,7 +205,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = Q5JTH5UZ63;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
-				INFOPLIST_FILE = ibim_test/Info.plist;
+				INFOPLIST_FILE = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
