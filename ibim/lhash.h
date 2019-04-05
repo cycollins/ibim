@@ -47,7 +47,9 @@
 namespace ibim
 {
 static const double not_quite_one = std::acos(-1.0) / 3.2;
-  
+template<typename T> using interval = std::tuple<const T &, const T &, bool, bool>;
+template<typename Key> using hash_function = std::function<double(const Key &)>;
+
 template<typename DatumType, typename ... Keys> class lhash
 {
   friend class iterator;
@@ -63,7 +65,6 @@ public:
   static constexpr int kActualMinOrder = std::min(kMinimumOrder, kActualMaxOrder);
   static constexpr bool multidimensional = key_count > 1;
   
-  template<typename T> using interval = std::tuple<const T &, const T &, bool, bool>;
   class iterator;
 
 private:
@@ -75,7 +76,7 @@ private:
   std::size_t burst_threshold;
   std::size_t magnitude;
   int current_shift;
-  std::tuple<std::function<double(Keys)> ... > hash_funcs;
+  std::tuple<hash_function<Keys> ... > hash_funcs;
   
   using key_set_type = std::tuple<Keys && ... >;
   using key_set_storage_type = std::tuple<Keys ... >;
@@ -102,7 +103,7 @@ private:
     }
 
    datum_record(DatumType &&in_datum, std::size_t in_full_index, key_set_type &&in_keys)
-      : datum(std::forward<DatumType>(in_datum))
+      : datum(std::move(in_datum))
       , full_index(in_full_index)
       , keys(std::move(in_keys))
     {
@@ -199,11 +200,11 @@ private:
     
   };
   
-  template<std::size_t ... Is> std::size_t create_index(bool full, std::index_sequence<Is ... >, key_set_type &&key_set)
+  template<std::size_t ... Is> std::size_t create_index(bool full, std::index_sequence<Is ... >, const key_set_type &key_set)
   {
     int effective_order = full ? maximum_order : order;
     double multiplicand = double(1 << effective_order);
-    double interpolants[key_count]{ std::get<Is>(hash_funcs)(std::forward<Keys>(std::get<Is>(key_set))) ... };
+    double interpolants[key_count]{ std::get<Is>(hash_funcs)(std::get<Is>(key_set)) ... };
     index_helper ih(multiplicand, interpolants);
     return ih.bit_reversal(effective_order);
   }
@@ -295,7 +296,7 @@ private:
     // create_index will be false when we calculate a test index when retrieving data to save a little time, but here
     // in the insert routine, we want both the test index and the full index in case we create a new data record.
     
-    std::size_t full_index = create_index(true, std::index_sequence_for<Keys ... >{}, std::move(key_set));
+    std::size_t full_index = create_index(true, std::index_sequence_for<Keys ... >{}, key_set);
     std::size_t index = full_index >> current_shift;
     
     assert(index <= table.size());
@@ -344,7 +345,7 @@ private:
 
 public:
   
-  lhash(int in_maximum_order, int initial_order, std::size_t in_burst_threshold, std::function<double(const Keys &)> ... in_hash_funcs)
+  lhash(int in_maximum_order, int initial_order, std::size_t in_burst_threshold, hash_function<Keys> ... in_hash_funcs)
     : maximum_order(std::min(in_maximum_order, kActualMaxOrder))
     , order(std::min<int>(initial_order, maximum_order))
     , burst_threshold(in_burst_threshold)
@@ -363,7 +364,6 @@ public:
   {
   }
   
-  // I have a goal of minimizing the number
   void insert(DatumType datum, Keys ... in_keys)
   {
     key_set_type key_set(std::forward<Keys>(in_keys) ... );

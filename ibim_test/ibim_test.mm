@@ -315,8 +315,8 @@ bool no_key_copy_construct(const char* name)
 
 - (void)testInsert
 {
-  std::function<double(const std::string&)> ciaas(case_insensitive_ascii_alphabetic_string);
-  std::function<double(int)> iwmm(std::bind(int_with_min_max, std::placeholders::_1, 0, 1000));
+  ibim::hash_function<std::string> ciaas(case_insensitive_ascii_alphabetic_string);
+  ibim::hash_function<int> iwmm(std::bind(int_with_min_max, std::placeholders::_1, 0, 1000));
   
   double_with_min_max dwmm(30.0, 50.0);
   
@@ -375,8 +375,8 @@ bool no_key_copy_construct(const char* name)
       XCTAssert(FALSE, @"wrong number of moves for overwrite test of \"tina\"");
     }
     
-    if (!did_key_move_construct("edward", 1)
-        || !no_key_copy_construct("edward"))
+    if (!did_key_copy_construct("edward", 1)
+        || !no_key_move_construct("edward"))
     {
       XCTAssert(FALSE, @"wrong number copies for overwrite test of \"edward\"");
     }
@@ -384,7 +384,7 @@ bool no_key_copy_construct(const char* name)
     if (!did_datum_copy_construct("dana", 1)
         || !did_datum_move_assign("dana", 1)
         || !no_datum_move_construct("dana")
-        || !no_datum_copy_construct("dana"))
+        || !no_datum_copy_assign("dana"))
     {
       XCTAssert(FALSE, @"wrong number of copies and move assigns for overwrite test of \"dana\"");
     }
@@ -420,7 +420,26 @@ bool no_key_copy_construct(const char* name)
     {
       XCTAssert(FALSE, @"wrong number of moves and copies for 1-dimensional intrinsic data test of \"edward\"");
     }
-  }
+    
+    reset_move_copy_data();
+    
+    test_key_class mary_key2("mary");
+    
+    test_hash.insert(9, std::move(mary_key2));
+    test_hash.insert(19, edward_key);
+    
+    if (!did_key_move_construct("mary", 1)
+        || !no_key_copy_construct("mary"))
+    {
+      XCTAssert(FALSE, @"wrong number of moves for 1-dimensional intrinsic overwrite data test of \"mary\"");
+    }
+    
+    if (!did_key_copy_construct("edward", 1)
+        || !no_key_move_construct("edward"))
+    {
+      XCTAssert(FALSE, @"wrong number of moves and copies for 1-dimensional intrinsic overwrite data test of \"edward\"");
+    }
+}
   
   {
     reset_move_copy_data();
@@ -448,6 +467,31 @@ bool no_key_copy_construct(const char* name)
     {
       XCTAssert(FALSE, @"wrong number of moves for  1-dimensional user-defined datum of \"bridget\"");
     }
+    
+    reset_move_copy_data();
+    
+    test_datum_class bridget_datum2("bridget");
+    
+    test_hash.insert(angus_datum, 700);
+    test_hash.insert(std::move(bridget_datum2), 500);
+    
+    if (!did_datum_copy_construct("angus", 1)
+        || !no_datum_copy_assign("angus")
+        || !did_datum_move_assign("angus", 1)
+        || !no_datum_copy_assign("angus"))
+    {
+      XCTAssert(FALSE, @"wrong number of moves and copies for 1-dimensional user-defined overwrite datum of \"angus\"");
+    }
+    
+    if (!did_datum_move_construct("bridget", 1)
+        || !no_datum_copy_construct("bridget")
+        || !did_datum_move_assign("bridget", 1)
+        || !no_datum_copy_assign("bridget"))
+    {
+      XCTAssert(FALSE, @"wrong number of moves for  1-dimensional user-defined overwrite datum of \"bridget\"");
+    }
+    
+
   }
 }
 
