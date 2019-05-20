@@ -283,6 +283,10 @@ private:
     return false;
   }
   
+  typename bucket_type::iterator find_common(const Keys & ... keys)
+  {
+  }
+  
   void insert_common(DatumType &datum, key_set_type &key_set)
   {
     // the "full_index" here means the final index this set of keys will generate when the table is burst to its
@@ -342,6 +346,7 @@ private:
     return range_iterator;
   }
   
+  const iterator end_iter();
 
 public:
   
@@ -366,10 +371,15 @@ public:
   
   void insert(DatumType datum, Keys ... in_keys)
   {
-    key_set_type key_set(std::forward<Keys>(in_keys) ... );
+    key_set_type key_set(static_cast<Keys &&>(in_keys) ... );
     insert_common(datum, key_set);
   }
-  
+
+  // observation: all the really involved data structures hide their iterator implementations entirely. std::vector and std::array
+  // do not because for efficiency, they are aliases of simple pointers. Given how difficult it is to get templated code to work
+  // in anything other than a header, I wonder how that works in a case like this, where the parameterized elements of ibim::lhash
+  // figure so prominanently in the implementation of its iterator.
+  using const_iterator = const iterator;
   class iterator : public std::iterator<std::forward_iterator_tag, DatumType>
   {
   private:
@@ -525,13 +535,6 @@ public:
     {
     }
     
-    static iterator end_iter();
-    
-    iterator end()
-    {
-      return end_iter();
-    }
-
     iterator(const iterator &) = default;
     iterator(iterator &&) = default;
 
@@ -547,10 +550,22 @@ public:
       }
       return *this;
     }
+    
+    inline const_iterator &operator++() const
+    {
+      return (*this)++;
+    }
 
     iterator operator++(int)
     {
       iterator retval = *this;
+      ++(*this);
+      return retval;
+    }
+    
+    const_iterator operator++(int) const
+    {
+      const_iterator retval = *this;
       ++(*this);
       return retval;
     }
@@ -570,12 +585,37 @@ public:
       return !(*this == other);
     }
     
-    typename iterator::reference operator*() const
+    typename iterator::reference operator*()
     {
       return current_record.datum;
     }
+    
+    inline typename iterator::const_reference operator*() const
+    {
+      return *(*this);
+    }
   };
   
+  iterator &end() const
+  {
+    return end_iter;
+  }
+  
+  const_iterator &cend() const
+  {
+    return end();
+  }
+  
+  iterator begin()
+  {
+    return iterator(*this);
+  }
+  
+  const_iterator cbegin() const
+  {
+    return begin();
+  }
+
   iterator range_query(const interval<Keys> & ... intervals)
   {
     // create a tuple from the intervals, to avoid marshalling the parameters to helper functions all over again
@@ -584,6 +624,11 @@ public:
     iterator range_iterator(std::move(generate_iterator(std::index_sequence_for<Keys ... >{}, interval_set, all_in)));
     return range_iterator;
   }
+  
+//  DatumType &operator[](const lookup_type &lookup)
+//  {
+//    return DatumType();
+//  }
 };
   
 }

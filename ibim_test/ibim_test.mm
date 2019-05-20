@@ -439,7 +439,7 @@ bool no_key_copy_construct(const char* name)
     {
       XCTAssert(FALSE, @"wrong number of moves and copies for 1-dimensional intrinsic overwrite data test of \"edward\"");
     }
-}
+  }
   
   {
     reset_move_copy_data();
@@ -490,8 +490,6 @@ bool no_key_copy_construct(const char* name)
     {
       XCTAssert(FALSE, @"wrong number of moves for  1-dimensional user-defined overwrite datum of \"bridget\"");
     }
-    
-
   }
 }
 
